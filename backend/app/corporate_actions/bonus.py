@@ -3,6 +3,7 @@ from datetime import date
 import logging
 from app.core.exceptions import ValidationError
 from .base import CorporateActionHandler, PortfolioState, ActionResult
+from app.explainability.event_formatter import format_bonus_event
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,12 @@ class BonusIssueHandler(CorporateActionHandler):
             cumulative_dividends_received=state.cumulative_dividends_received
         )
 
-        description = (
-            f"Bonus issue {int(numerator)}:{int(denominator)}. "
-            f"{additional_shares} additional shares issued. "
-            f"Holdings increased from {state.quantity} to {new_quantity} shares."
+        description = format_bonus_event(
+            numerator=int(numerator),
+            denominator=int(denominator),
+            additional_shares=additional_shares,
+            quantity_before=state.quantity,
+            quantity_after=new_quantity
         )
 
         return ActionResult(

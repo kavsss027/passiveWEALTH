@@ -37,8 +37,10 @@ async def get_latest_price(ticker: str, exchange: str) -> Decimal:
         t = yf.Ticker(f"{ticker}.{suffix}")
         hist = t.history(period="5d", auto_adjust=False)
         if not hist.empty:
-            raw_val = float(hist["Close"].iloc[-1])
-            return Decimal(str(round(raw_val, 4)))
+            hist_clean = hist.dropna(subset=["Close"])
+            if not hist_clean.empty:
+                raw_val = float(hist_clean["Close"].iloc[-1])
+                return Decimal(str(round(raw_val, 4)))
         raise DataIngestionError(f"No price data returned by yfinance for {ticker}")
         
     try:

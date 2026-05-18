@@ -16,6 +16,49 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="styles.css">
     
+    <style>
+        /* Two-Mode Toggle Styles */
+        .form-mode-toggle {
+            display: flex;
+            gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 0.25rem;
+            border-radius: 10px;
+            margin-bottom: 1.25rem;
+        }
+
+        .mode-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 0.65rem 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+            border: 1px solid var(--accent-indigo);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+        }
+
+        .mode-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-primary);
+        }
+    </style>
+    
     <!-- React, ReactDOM, Babel for zero-config modern React -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -26,6 +69,17 @@
 
     <script type="text/babel">
         const { useState, useEffect } = React;
+
+        // Helper function for monetary formatting to 2 decimal places max
+        const fmt = (val) => parseFloat(val).toFixed(2);
+
+        // Helper function to format all rupee values in any string
+        const formatRupeeInString = (str) => {
+            if (!str) return str;
+            return str.replace(/(₹|Rs\.|INR)\s*([0-9]+(?:\.[0-9]+)?)/g, (match, currencySymbol, val) => {
+                return currencySymbol + fmt(val);
+            });
+        };
 
         // Custom Card Component
         function MetricCard({ title, value, subtext, icon, glowClass }) {
@@ -67,7 +121,7 @@
                             <span className="timeline-date font-numeric">{event.event_date}</span>
                             <span className={`timeline-badge-label`}>{event.event_type}</span>
                         </div>
-                        <h3 className="timeline-title">{event.description}</h3>
+                        <h3 className="timeline-title">{formatRupeeInString(event.description)}</h3>
                         <div className="timeline-details">
                             <div className="detail-item">
                                 <span className="detail-label">Quantity After:</span>
@@ -76,7 +130,7 @@
                             {event.financial_impact && parseFloat(event.financial_impact) > 0 && event.event_type === 'DIVIDEND' && (
                                 <div className="detail-item font-highlight">
                                     <span className="detail-label">Cash Received:</span>
-                                    <span className="detail-value font-numeric">₹{parseFloat(event.financial_impact).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <span className="detail-value font-numeric">₹{fmt(event.financial_impact)}</span>
                                 </div>
                             )}
                         </div>
@@ -93,6 +147,7 @@
             const [buyDate, setBuyDate] = useState('1999-01-01');
             const [quantity, setQuantity] = useState('100');
             const [totalAmountInvested, setTotalAmountInvested] = useState('50000.00');
+            const [mode, setMode] = useState('QUANTITY'); // 'QUANTITY' or 'TOTAL'
             
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
@@ -100,17 +155,21 @@
             const [filterType, setFilterType] = useState('ALL');
 
             // Direct fetch logic
-            const triggerReconstructDirect = async (t, ex, d, q, ta) => {
+            const triggerReconstructDirect = async (t, ex, d, q, ta, currentMode) => {
                 setLoading(true);
                 setError(null);
                 try {
                     const payload = {
                         ticker: t.trim().toUpperCase(),
                         exchange: ex.toUpperCase(),
-                        buy_date: d,
-                        quantity: parseFloat(q)
+                        buy_date: d
                     };
-                    if (ta && ta.trim() !== "") {
+
+                    const targetMode = currentMode || mode;
+
+                    if (targetMode === 'QUANTITY') {
+                        payload.quantity = parseFloat(q);
+                    } else {
                         payload.total_amount_invested = parseFloat(ta);
                     }
 
@@ -145,48 +204,44 @@
                 let pExchange = 'NSE';
                 let pBuyDate = '1999-01-01';
                 let pQuantity = '100';
-                let pTotalAmount = '50000.00';
 
                 if (preset === 'INFY') {
                     pTicker = 'INFY';
                     pExchange = 'NSE';
                     pBuyDate = '1999-01-01';
                     pQuantity = '100';
-                    pTotalAmount = '50000.00';
                 } else if (preset === 'TCS') {
                     pTicker = 'TCS';
                     pExchange = 'NSE';
                     pBuyDate = '2010-01-01';
                     pQuantity = '10';
-                    pTotalAmount = '10000.00';
                 } else if (preset === 'WIPRO') {
                     pTicker = 'WIPRO';
                     pExchange = 'NSE';
                     pBuyDate = '2005-01-01';
                     pQuantity = '50';
-                    pTotalAmount = '10000.00';
                 } else if (preset === 'HDFCBANK') {
                     pTicker = 'HDFCBANK';
                     pExchange = 'NSE';
                     pBuyDate = '2008-01-01';
                     pQuantity = '20';
-                    pTotalAmount = '24000.00';
                 }
 
                 setTicker(pTicker);
                 setExchange(pExchange);
                 setBuyDate(pBuyDate);
                 setQuantity(pQuantity);
-                setTotalAmountInvested(pTotalAmount);
+                setTotalAmountInvested('');
+                setMode('QUANTITY');
 
-                // Run reconstruction directly
-                triggerReconstructDirect(pTicker, pExchange, pBuyDate, pQuantity, pTotalAmount);
+                // Run reconstruction directly in QUANTITY mode
+                triggerReconstructDirect(pTicker, pExchange, pBuyDate, pQuantity, '', 'QUANTITY');
             };
 
             // Reconstruct logic from form submit
             const handleReconstruct = async (e) => {
                 if (e) e.preventDefault();
-                await triggerReconstructDirect(ticker, exchange, buyDate, quantity, totalAmountInvested);
+                await triggerReconstructDirect(ticker, exchange, buyDate, quantity, totalAmountInvested, mode);
             };
 
             // Calculations
@@ -297,7 +352,25 @@
                                     </div>
                                 </div>
 
-                                <div className="form-group-row">
+                                {/* Two-Mode Toggle */}
+                                <div className="form-mode-toggle">
+                                    <button 
+                                        type="button" 
+                                        className={`mode-btn ${mode === 'QUANTITY' ? 'active' : ''}`}
+                                        onClick={() => setMode('QUANTITY')}
+                                    >
+                                        <i className="fa-solid fa-list-ol"></i> I know my Quantity
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className={`mode-btn ${mode === 'TOTAL' ? 'active' : ''}`}
+                                        onClick={() => setMode('TOTAL')}
+                                    >
+                                        <i className="fa-solid fa-indian-rupee-sign"></i> I know my Total Investment
+                                    </button>
+                                </div>
+
+                                {mode === 'QUANTITY' ? (
                                     <div className="form-group">
                                         <label>Quantity Bought</label>
                                         <div className="input-with-icon">
@@ -311,6 +384,7 @@
                                             />
                                         </div>
                                     </div>
+                                ) : (
                                     <div className="form-group">
                                         <label>Total Amount Invested (₹)</label>
                                         <div className="input-with-icon">
@@ -320,11 +394,13 @@
                                                 step="0.01"
                                                 value={totalAmountInvested} 
                                                 onChange={(e) => setTotalAmountInvested(e.target.value)}
-                                                placeholder="Optional — leave blank to auto-fetch"
+                                                placeholder="Enter investment amount in ₹"
+                                                min="1"
+                                                required 
                                             />
                                         </div>
                                     </div>
-                                </div>
+                                )}
 
                                 <button type="submit" className="btn-reconstruct font-numeric" disabled={loading}>
                                     {loading ? (
@@ -353,11 +429,11 @@
                                     </div>
                                     <div className="summary-item">
                                         <span>Initial Price:</span>
-                                        <strong>₹{originalBuyPrice.toFixed(2)}</strong>
+                                        <strong>₹{fmt(originalBuyPrice)}</strong>
                                     </div>
                                     <div className="summary-item">
                                         <span>Total Outlay:</span>
-                                        <strong>₹{initialInvestment.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                        <strong>₹{fmt(initialInvestment)}</strong>
                                     </div>
                                 </div>
                             )}
@@ -369,7 +445,7 @@
                                         <span>Data Engine Notes</span>
                                     </div>
                                     {data.data_quality.warnings.map((warning, index) => (
-                                        <p key={index} style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: '1.4' }}>{warning}</p>
+                                        <p key={index} style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: '1.4' }}>{formatRupeeInString(warning)}</p>
                                     ))}
                                 </div>
                             )}
@@ -405,28 +481,28 @@
                                         />
                                         <MetricCard 
                                             title="Adjusted Cost Basis" 
-                                            value={`₹${adjustedCostBasis.toFixed(2)}`}
-                                            subtext={`Initial Cost: ₹${originalBuyPrice.toFixed(2)}`}
+                                            value={`₹${fmt(adjustedCostBasis)}`}
+                                            subtext={`Initial Cost: ₹${fmt(originalBuyPrice)}`}
                                             icon="fa-calculator"
                                             glowClass="glow-indigo"
                                         />
                                         <MetricCard 
                                             title="Total Dividends" 
-                                            value={`₹${totalDividends.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                            value={`₹${fmt(totalDividends)}`}
                                             subtext="All cash dividends received"
                                             icon="fa-hand-holding-dollar"
                                             glowClass="glow-emerald"
                                         />
                                         <MetricCard 
                                             title="Unrealized Value" 
-                                            value={`₹${currentMarketValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                            value={`₹${fmt(currentMarketValue)}`}
                                             subtext="Live market valuation"
                                             icon="fa-house-laptop"
                                             glowClass="glow-amber"
                                         />
                                         <MetricCard 
                                             title="Total Gain / Wealth" 
-                                            value={`₹${totalWealth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                            value={`₹${fmt(totalWealth)}`}
                                             subtext={`Total Return: +${totalReturnPercent.toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`}
                                             icon="fa-piggy-bank"
                                             glowClass="glow-pink"

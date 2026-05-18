@@ -118,6 +118,31 @@ async def test_reconstruct_portfolio_invalid_quantity(db_session):
     app.dependency_overrides.clear()
 
 @pytest.mark.asyncio
+async def test_reconstruct_portfolio_total_amount_only(db_session):
+    async def override_get_db():
+        yield db_session
+    app.dependency_overrides[get_db] = override_get_db
+
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        payload = {
+            "ticker": "INFY",
+            "exchange": "NSE",
+            "buy_date": "1999-01-01",
+            "total_amount_invested": 50000.00
+        }
+        response = await ac.post("/api/v1/portfolio/reconstruct", json=payload)
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert data["ticker"] == "INFY"
+        assert data["exchange"] == "NSE"
+        assert data["timeline"][0]["event_type"] == "BUY"
+        # Since quantity was omitted, it should be derived (50000 / ~741 = 67 shares)
+        assert data["original_quantity"] > 0
+        assert "Quantity derived from total investment amount" in data["data_quality"]["warnings"][0]
+    app.dependency_overrides.clear()
+
+@pytest.mark.asyncio
 async def test_get_corporate_actions(db_session):
     async def override_get_db():
         yield db_session

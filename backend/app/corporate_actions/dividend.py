@@ -2,6 +2,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import date
 from app.core.exceptions import ValidationError
 from .base import CorporateActionHandler, PortfolioState, ActionResult
+from app.explainability.event_formatter import format_dividend_event
 
 class CashDividendHandler(CorporateActionHandler):
     def is_eligible(self, buy_date: date, action_date: date) -> bool:
@@ -30,9 +31,10 @@ class CashDividendHandler(CorporateActionHandler):
             cumulative_dividends_received=new_cumulative
         )
 
-        description = (
-            f"Dividend of ₹{dividend_per_share} per share received on "
-            f"{state.quantity} shares. ₹{dividend_received} credited."
+        description = format_dividend_event(
+            dividend_per_share=dividend_per_share,
+            quantity=state.quantity,
+            dividend_received=dividend_received
         )
 
         return ActionResult(

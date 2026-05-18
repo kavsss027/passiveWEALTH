@@ -3,6 +3,7 @@ from datetime import date
 import logging
 from app.core.exceptions import ValidationError
 from .base import CorporateActionHandler, PortfolioState, ActionResult
+from app.explainability.event_formatter import format_split_event
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,13 @@ class StockSplitHandler(CorporateActionHandler):
             cumulative_dividends_received=state.cumulative_dividends_received
         )
 
-        description = (
-            f"Stock split {int(numerator)}:{int(denominator)}. "
-            f"Holdings changed from {state.quantity} to {new_quantity} shares. "
-            f"Cost basis adjusted from ₹{state.cost_basis_per_share} to ₹{new_cost_basis} per share."
+        description = format_split_event(
+            numerator=int(numerator),
+            denominator=int(denominator),
+            quantity_before=state.quantity,
+            quantity_after=new_quantity,
+            cost_before=state.cost_basis_per_share,
+            cost_after=new_cost_basis
         )
 
         return ActionResult(

@@ -1,10 +1,12 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 def format_buy_event(quantity: Decimal, ticker: str, price: Decimal, total: Decimal) -> str:
+    price_display = price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    total_display = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return (
         f"Purchased {int(quantity)} shares of {ticker} "
-        f"at ₹{price} per share. "
-        f"Total invested: ₹{total}."
+        f"at ₹{price_display} per share. "
+        f"Total invested: ₹{total_display}."
     )
 
 def format_split_event(
@@ -15,10 +17,12 @@ def format_split_event(
     cost_before: Decimal,
     cost_after: Decimal
 ) -> str:
+    cost_before_display = cost_before.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    cost_after_display = cost_after.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return (
         f"Stock split {numerator}:{denominator}. "
         f"Holdings changed from {int(quantity_before)} to {int(quantity_after)} shares. "
-        f"Cost basis adjusted from ₹{cost_before} to ₹{cost_after} per share."
+        f"Cost basis adjusted from ₹{cost_before_display} to ₹{cost_after_display} per share."
     )
 
 def format_bonus_event(
@@ -39,8 +43,10 @@ def format_dividend_event(
     quantity: Decimal,
     dividend_received: Decimal
 ) -> str:
+    dps_display = dividend_per_share.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    div_received_display = dividend_received.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return (
-        f"Dividend of ₹{dividend_per_share} per share received on "
+        f"Dividend of ₹{dps_display} per share received on "
         f"{int(quantity)} shares. "
-        f"₹{dividend_received} credited."
+        f"₹{div_received_display} credited."
     )

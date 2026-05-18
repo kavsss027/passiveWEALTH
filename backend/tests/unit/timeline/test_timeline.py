@@ -77,9 +77,9 @@ def test_timeline_generation_and_rendering():
     
     # 3. Assert cumulative_dividends is a running total per entry
     assert raw_data["timeline"][0]["cumulative_dividends"] == "0.0000"
-    assert raw_data["timeline"][1]["cumulative_dividends"] == "0"
-    assert raw_data["timeline"][2]["cumulative_dividends"] == "0"
-    assert raw_data["timeline"][3]["cumulative_dividends"] == "1000.00"
+    assert raw_data["timeline"][1]["cumulative_dividends"] == "0.0000"
+    assert raw_data["timeline"][2]["cumulative_dividends"] == "0.0000"
+    assert raw_data["timeline"][3]["cumulative_dividends"] == "1000.0000"
     
     # 4. Assert impact types are correct
     # Split impact_type is STRUCTURAL not REALIZED

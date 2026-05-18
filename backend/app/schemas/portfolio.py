@@ -11,13 +11,20 @@ class DataQuality(BaseModel):
     warnings: List[str]
 
 from typing import Optional
+from pydantic import model_validator
 
 class PortfolioReconstructRequest(BaseModel):
     ticker: str
     exchange: str
     buy_date: date
-    quantity: int = Field(gt=0)
+    quantity: Optional[int] = Field(default=None, gt=0)
     total_amount_invested: Optional[Decimal] = Field(default=None, gt=0)
+
+    @model_validator(mode='after')
+    def validate_at_least_one_input(self):
+        if self.quantity is None and self.total_amount_invested is None:
+            raise ValueError('Provide either quantity or total_amount_invested')
+        return self
 
 
     @field_validator("exchange")

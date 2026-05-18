@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Dict, Any
 from app.corporate_actions.base import ActionResult
 from app.explainability.event_formatter import format_buy_event
@@ -13,6 +13,7 @@ def build_timeline(
     timeline = []
 
     # Always add buy event first
+    total_invested_q = Decimal(str(buy_event["total_invested"])).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
     timeline.append({
         "event_date": str(buy_event["date"]),
         "event_type": "BUY",
@@ -24,7 +25,7 @@ def build_timeline(
         ),
         "quantity_before": 0,
         "quantity_after": int(buy_event["quantity"]),
-        "financial_impact": str(buy_event["total_invested"]),
+        "financial_impact": str(total_invested_q),
         "impact_type": "INVESTED",
         "cumulative_dividends": "0.0000"
     })
@@ -43,15 +44,17 @@ def build_timeline(
         if result.event_type == "DIVIDEND":
             cumulative_dividends += result.financial_impact
 
+        financial_impact_q = Decimal(str(result.financial_impact)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        cumulative_dividends_q = Decimal(str(cumulative_dividends)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
         timeline.append({
             "event_date": str(result.new_state.date),
             "event_type": result.event_type,
             "description": result.description,
             "quantity_before": int(prev_quantity),
             "quantity_after": int(result.new_state.quantity),
-            "financial_impact": str(result.financial_impact),
+            "financial_impact": str(financial_impact_q),
             "impact_type": result.impact_type,
-            "cumulative_dividends": str(cumulative_dividends)
+            "cumulative_dividends": str(cumulative_dividends_q)
         })
 
         prev_quantity = result.new_state.quantity

@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import date
 from typing import List, Dict, Any
 from app.corporate_actions.base import ActionResult, PortfolioState
@@ -75,12 +75,18 @@ class TimelineGenerator:
         timeline = build_timeline(buy_event, action_results)
 
         # 5. Current State
+        current_price_q = current_price.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        current_market_value_q = (final_portfolio_state.quantity * current_price).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        adjusted_cost_basis_q = final_portfolio_state.cost_basis_per_share.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        total_invested_q = final_portfolio_state.total_invested.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        original_investment_q = original_investment.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
         current_state = {
             "quantity": int(final_portfolio_state.quantity),
-            "current_price_per_share": str(current_price),
-            "current_market_value": str(final_portfolio_state.quantity * current_price),
-            "adjusted_cost_basis_per_share": str(final_portfolio_state.cost_basis_per_share),
-            "total_invested": str(final_portfolio_state.total_invested)
+            "current_price_per_share": str(current_price_q),
+            "current_market_value": str(current_market_value_q),
+            "adjusted_cost_basis_per_share": str(adjusted_cost_basis_q),
+            "total_invested": str(total_invested_q)
         }
 
         # 6. Data Quality
@@ -95,7 +101,7 @@ class TimelineGenerator:
             "exchange": exchange,
             "buy_date": buy_date,
             "original_quantity": int(original_quantity),
-            "original_investment": str(original_investment),
+            "original_investment": str(original_investment_q),
             "current_state": current_state,
             "wealth_summary": wealth_summary,
             "timeline": timeline,

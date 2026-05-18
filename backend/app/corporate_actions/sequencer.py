@@ -24,9 +24,15 @@ class CorporateActionSequencer:
         Filters out ineligible actions and sorts remaining actions by action_date,
         and then by action_type priority on same-date: SPLIT -> BONUS -> DIVIDEND.
         """
+        today = date.today()
         eligible_actions = []
         for action in actions:
             action_type = action["action_type"]
+            
+            # Filter out future corporate actions
+            if action["action_date"] > today:
+                continue
+                
             handler = self.handlers.get(action_type)
             if not handler:
                 # Keep it in eligible actions so engine can log a warning

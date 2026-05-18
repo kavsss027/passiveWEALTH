@@ -246,6 +246,10 @@ async def ensure_corporate_actions_ingested(session: AsyncSession, ticker: str, 
         # Re-fetch all actions
         actions = await corporate_actions_repo.get_by_ticker(session, ticker_upper, exchange)
     
+    # Filter out future corporate actions
+    today = date.today()
+    actions = [act for act in actions if act.action_date <= today]
+    
     return actions
 
 
@@ -264,7 +268,7 @@ class ReconstructionService:
         ticker: str,
         exchange: str,
         buy_date: date,
-        quantity: Decimal,
+        quantity: Optional[Decimal],
         total_amount_invested: Optional[Decimal] = None
     ) -> ReconstructionResult:
         # Ingest and retrieve corporate actions
@@ -279,19 +283,31 @@ class ReconstructionService:
                 "denominator": action.denominator
             })
 
-        if total_amount_invested is not None:
+        derived_quantity = quantity
+        if quantity is not None and total_amount_invested is not None:
             buy_price = total_amount_invested / quantity
-        else:
+        elif quantity is not None:
             try:
                 buy_price = await get_historical_close_price(ticker, exchange, buy_date)
             except Exception:
                 buy_price = Decimal("100.00") # absolute fallback
+        else:
+            # Only total_amount_invested is provided
+            try:
+                price = await get_historical_close_price(ticker, exchange, buy_date)
+            except Exception:
+                price = Decimal("100.00") # absolute fallback
+            import math
+            derived_quantity = Decimal(str(math.floor(total_amount_invested / price)))
+            if derived_quantity <= 0:
+                derived_quantity = Decimal("1")
+            buy_price = total_amount_invested / derived_quantity
 
         result = await self.engine.reconstruct(
             ticker=ticker,
             exchange=exchange,
             buy_date=buy_date,
-            quantity=quantity,
+            quantity=derived_quantity,
             buy_price_per_share=buy_price,
             corporate_actions=actions_dict
         )
