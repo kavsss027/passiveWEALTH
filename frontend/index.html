@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PassiveWEALTH — Long-Term Wealth Reconstruction Dashboard</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- React, ReactDOM, Babel for zero-config modern React -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Custom Card Component
+        function MetricCard({ title, value, subtext, icon, glowClass }) {
+            return (
+                <div className={`metric-card ${glowClass}`}>
+                    <div className="card-header-icon">
+                        <i className={`fa-solid ${icon}`}></i>
+                    </div>
+                    <div className="card-body">
+                        <span className="card-title">{title}</span>
+                        <h2 className="card-value font-numeric">{value}</h2>
+                        {subtext && <span className="card-subtext">{subtext}</span>}
+                    </div>
+                </div>
+            );
+        }
+
+        // Timeline Event Component
+        function TimelineItem({ event, index }) {
+            const getIconAndClass = (type) => {
+                switch(type) {
+                    case 'BUY': return { icon: 'fa-cart-shopping', colorClass: 'buy-event' };
+                    case 'SPLIT': return { icon: 'fa-scissors', colorClass: 'split-event' };
+                    case 'BONUS': return { icon: 'fa-gift', colorClass: 'bonus-event' };
+                    case 'DIVIDEND': return { icon: 'fa-money-bill-trend-up', colorClass: 'dividend-event' };
+                    default: return { icon: 'fa-circle-info', colorClass: 'default-event' };
+                }
+            };
+
+            const { icon, colorClass } = getIconAndClass(event.event_type);
+
+            return (
+                <div className={`timeline-item ${colorClass}`}>
+                    <div className="timeline-badge">
+                        <i className={`fa-solid ${icon}`}></i>
+                    </div>
+                    <div className="timeline-content">
+                        <div className="timeline-meta">
+                            <span className="timeline-date font-numeric">{event.event_date}</span>
+                            <span className={`timeline-badge-label`}>{event.event_type}</span>
+                        </div>
+                        <h3 className="timeline-title">{event.description}</h3>
+                        <div className="timeline-details">
+                            <div className="detail-item">
+                                <span className="detail-label">Quantity After:</span>
+                                <span className="detail-value font-numeric">{event.quantity_after} shares</span>
+                            </div>
+                            {event.financial_impact && parseFloat(event.financial_impact) > 0 && event.event_type === 'DIVIDEND' && (
+                                <div className="detail-item font-highlight">
+                                    <span className="detail-label">Cash Received:</span>
+                                    <span className="detail-value font-numeric">₹{parseFloat(event.financial_impact).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            // State
+            const [ticker, setTicker] = useState('INFY');
+            const [exchange, setExchange] = useState('NSE');
+            const [buyDate, setBuyDate] = useState('1999-01-01');
+            const [quantity, setQuantity] = useState('100');
+            const [totalAmountInvested, setTotalAmountInvested] = useState('50000.00');
+            
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [data, setData] = useState(null);
+            const [filterType, setFilterType] = useState('ALL');
+
+            // Direct fetch logic
+            const triggerReconstructDirect = async (t, ex, d, q, ta) => {
+                setLoading(true);
+                setError(null);
+                try {
+                    const payload = {
+                        ticker: t.trim().toUpperCase(),
+                        exchange: ex.toUpperCase(),
+                        buy_date: d,
+                        quantity: parseFloat(q)
+                    };
+                    if (ta && ta.trim() !== "") {
+                        payload.total_amount_invested = parseFloat(ta);
+                    }
+
+                    const response = await fetch('http://localhost:8000/api/v1/portfolio/reconstruct', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const resJson = await response.json();
+
+                    if (!response.ok) {
+                        const errMsg = resJson.detail || resJson.error?.message || 'Failed to reconstruct portfolio';
+                        setError(errMsg);
+                        setData(null);
+                    } else {
+                        setData(resJson);
+                    }
+                } catch (err) {
+                    setError('Unable to connect to the backend server. Make sure it is running on port 8000.');
+                    setData(null);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Quick load presets
+            const loadPreset = (preset) => {
+                let pTicker = 'INFY';
+                let pExchange = 'NSE';
+                let pBuyDate = '1999-01-01';
+                let pQuantity = '100';
+                let pTotalAmount = '50000.00';
+
+                if (preset === 'INFY') {
+                    pTicker = 'INFY';
+                    pExchange = 'NSE';
+                    pBuyDate = '1999-01-01';
+                    pQuantity = '100';
+                    pTotalAmount = '50000.00';
+                } else if (preset === 'TCS') {
+                    pTicker = 'TCS';
+                    pExchange = 'NSE';
+                    pBuyDate = '2010-01-01';
+                    pQuantity = '10';
+                    pTotalAmount = '10000.00';
+                } else if (preset === 'WIPRO') {
+                    pTicker = 'WIPRO';
+                    pExchange = 'NSE';
+                    pBuyDate = '2005-01-01';
+                    pQuantity = '50';
+                    pTotalAmount = '10000.00';
+                } else if (preset === 'HDFCBANK') {
+                    pTicker = 'HDFCBANK';
+                    pExchange = 'NSE';
+                    pBuyDate = '2008-01-01';
+                    pQuantity = '20';
+                    pTotalAmount = '24000.00';
+                }
+
+                setTicker(pTicker);
+                setExchange(pExchange);
+                setBuyDate(pBuyDate);
+                setQuantity(pQuantity);
+                setTotalAmountInvested(pTotalAmount);
+
+                // Run reconstruction directly
+                triggerReconstructDirect(pTicker, pExchange, pBuyDate, pQuantity, pTotalAmount);
+            };
+
+            // Reconstruct logic from form submit
+            const handleReconstruct = async (e) => {
+                if (e) e.preventDefault();
+                await triggerReconstructDirect(ticker, exchange, buyDate, quantity, totalAmountInvested);
+            };
+
+            // Calculations
+            let initialInvestment = 0;
+            let currentShares = 0;
+            let currentPrice = 0;
+            let currentMarketValue = 0;
+            let totalDividends = 0;
+            let totalWealth = 0;
+            let totalGain = 0;
+            let totalReturnPercent = 0;
+            let cagr = 0;
+            let adjustedCostBasis = 0;
+            let originalQuantity = 0;
+            let originalBuyPrice = 0;
+            let holdingYears = 0;
+
+            if (data) {
+                initialInvestment = parseFloat(data.original_investment);
+                originalQuantity = parseFloat(data.original_quantity);
+                originalBuyPrice = initialInvestment / originalQuantity;
+                currentShares = parseFloat(data.current_state.quantity);
+                currentPrice = parseFloat(data.current_state.current_price_per_share);
+                currentMarketValue = parseFloat(data.current_state.current_market_value);
+                totalDividends = parseFloat(data.wealth_summary.total_dividends_received);
+                totalWealth = parseFloat(data.wealth_summary.total_wealth_if_sold);
+                adjustedCostBasis = parseFloat(data.current_state.adjusted_cost_basis_per_share);
+                
+                totalGain = totalWealth - initialInvestment;
+                totalReturnPercent = (totalGain / initialInvestment) * 100;
+
+                // Holding Period
+                const buyDateObj = new Date(data.buy_date);
+                const today = new Date();
+                const diffTime = Math.abs(today - buyDateObj);
+                holdingYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+                
+                if (holdingYears > 0) {
+                    cagr = (Math.pow((totalWealth / initialInvestment), (1 / holdingYears)) - 1) * 100;
+                }
+            }
+
+            const filteredTimeline = data?.timeline?.filter(event => {
+                if (filterType === 'ALL') return true;
+                return event.event_type === filterType;
+            }) || [];
+
+            return (
+                <div className="dashboard-container">
+                    {/* Header */}
+                    <header className="main-header">
+                        <div className="logo-section">
+                            <div className="logo-icon-container">
+                                <i className="fa-solid fa-chart-line logo-icon"></i>
+                            </div>
+                            <div>
+                                <h1>Passive<span className="text-highlight">WEALTH</span></h1>
+                                <p className="logo-tagline font-numeric">LONG-TERM WEALTH RECONSTRUCTION ENGINE</p>
+                            </div>
+                        </div>
+                        <div className="preset-badges">
+                            <span className="preset-label">Presets:</span>
+                            <button className={`preset-badge ${ticker === 'INFY' ? 'active' : ''}`} onClick={() => loadPreset('INFY')}>INFY (Infosys)</button>
+                            <button className={`preset-badge ${ticker === 'TCS' ? 'active' : ''}`} onClick={() => loadPreset('TCS')}>TCS (Tata)</button>
+                            <button className={`preset-badge ${ticker === 'WIPRO' ? 'active' : ''}`} onClick={() => loadPreset('WIPRO')}>WIPRO</button>
+                            <button className={`preset-badge ${ticker === 'HDFCBANK' ? 'active' : ''}`} onClick={() => loadPreset('HDFCBANK')}>HDFC BANK</button>
+                        </div>
+                    </header>
+
+                    <div className="dashboard-grid">
+                        {/* Control Panel Card */}
+                        <div className="glass-panel control-panel">
+                            <h2><i className="fa-solid fa-sliders header-icon"></i> Reconstruction Params</h2>
+                            <form onSubmit={handleReconstruct} className="params-form">
+                                <div className="form-group-row">
+                                    <div className="form-group flex-2">
+                                        <label>Ticker Symbol</label>
+                                        <div className="input-with-icon">
+                                            <i className="fa-solid fa-magnifying-glass input-icon"></i>
+                                            <input 
+                                                type="text" 
+                                                value={ticker} 
+                                                onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                                                placeholder="e.g. INFY"
+                                                required 
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="form-group flex-1">
+                                        <label>Exchange</label>
+                                        <select value={exchange} onChange={(e) => setExchange(e.target.value)}>
+                                            <option value="NSE">NSE</option>
+                                            <option value="BSE">BSE</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Buy Date</label>
+                                    <div className="input-with-icon">
+                                        <i className="fa-regular fa-calendar input-icon"></i>
+                                        <input 
+                                            type="date" 
+                                            value={buyDate} 
+                                            onChange={(e) => setBuyDate(e.target.value)}
+                                            required 
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="form-group-row">
+                                    <div className="form-group">
+                                        <label>Quantity Bought</label>
+                                        <div className="input-with-icon">
+                                            <i className="fa-solid fa-list-ol input-icon"></i>
+                                            <input 
+                                                type="number" 
+                                                value={quantity} 
+                                                onChange={(e) => setQuantity(e.target.value)}
+                                                min="1"
+                                                required 
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Total Amount Invested (₹)</label>
+                                        <div className="input-with-icon">
+                                            <i className="fa-solid fa-indian-rupee-sign input-icon"></i>
+                                            <input 
+                                                type="number" 
+                                                step="0.01"
+                                                value={totalAmountInvested} 
+                                                onChange={(e) => setTotalAmountInvested(e.target.value)}
+                                                placeholder="Optional — leave blank to auto-fetch"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button type="submit" className="btn-reconstruct font-numeric" disabled={loading}>
+                                    {loading ? (
+                                        <span><i className="fa-solid fa-spinner fa-spin mr-2"></i> Reconstructing...</span>
+                                    ) : (
+                                        <span><i className="fa-solid fa-rocket mr-2"></i> Trigger Reconstruction</span>
+                                    )}
+                                </button>
+                            </form>
+
+                            {error && (
+                                <div className="error-alert">
+                                    <i className="fa-solid fa-triangle-exclamation"></i>
+                                    <div>
+                                        <strong>Reconstruction Failed:</strong>
+                                        <p>{error}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {data && (
+                                <div className="input-summary-footer font-numeric">
+                                    <div className="summary-item">
+                                        <span>Initial shares:</span>
+                                        <strong>{data.original_quantity}</strong>
+                                    </div>
+                                    <div className="summary-item">
+                                        <span>Initial Price:</span>
+                                        <strong>₹{originalBuyPrice.toFixed(2)}</strong>
+                                    </div>
+                                    <div className="summary-item">
+                                        <span>Total Outlay:</span>
+                                        <strong>₹{initialInvestment.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                    </div>
+                                </div>
+                            )}
+
+                            {data && data.data_quality && data.data_quality.warnings && data.data_quality.warnings.length > 0 && (
+                                <div className="data-quality-footer font-numeric" style={{ marginTop: '1rem', padding: '0.75rem', borderRadius: '8px', background: 'rgba(235, 94, 40, 0.1)', border: '1px solid rgba(235, 94, 40, 0.2)', fontSize: '0.85rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#eb5e28', fontWeight: '600', marginBottom: '0.25rem' }}>
+                                        <i className="fa-solid fa-triangle-exclamation"></i>
+                                        <span>Data Engine Notes</span>
+                                    </div>
+                                    {data.data_quality.warnings.map((warning, index) => (
+                                        <p key={index} style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: '1.4' }}>{warning}</p>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Main Analysis Section */}
+                        <div className="analysis-section">
+                            {loading && !data && (
+                                <div className="loading-state">
+                                    <div className="loader-element"></div>
+                                    <p>Assembling corporate histories, validating splits, bonuses, and parsing live closing prices...</p>
+                                </div>
+                            )}
+
+                            {!data && !loading && !error && (
+                                <div className="empty-state">
+                                    <i className="fa-solid fa-chart-pie empty-icon"></i>
+                                    <h3>Ready to Reconstruct</h3>
+                                    <p>Enter your holding details and click Reconstruct to see your wealth timeline.</p>
+                                </div>
+                            )}
+
+                            {data && (
+                                <div className="analysis-content">
+                                    {/* Metrics Grid */}
+                                    <div className="metrics-grid">
+                                        <MetricCard 
+                                            title="Current Shares" 
+                                            value={currentShares.toLocaleString('en-IN')}
+                                            subtext={`Multiplier: ${(currentShares / originalQuantity).toFixed(1)}x`}
+                                            icon="fa-share-nodes"
+                                            glowClass="glow-blue"
+                                        />
+                                        <MetricCard 
+                                            title="Adjusted Cost Basis" 
+                                            value={`₹${adjustedCostBasis.toFixed(2)}`}
+                                            subtext={`Initial Cost: ₹${originalBuyPrice.toFixed(2)}`}
+                                            icon="fa-calculator"
+                                            glowClass="glow-indigo"
+                                        />
+                                        <MetricCard 
+                                            title="Total Dividends" 
+                                            value={`₹${totalDividends.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                            subtext="All cash dividends received"
+                                            icon="fa-hand-holding-dollar"
+                                            glowClass="glow-emerald"
+                                        />
+                                        <MetricCard 
+                                            title="Unrealized Value" 
+                                            value={`₹${currentMarketValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                            subtext="Live market valuation"
+                                            icon="fa-house-laptop"
+                                            glowClass="glow-amber"
+                                        />
+                                        <MetricCard 
+                                            title="Total Gain / Wealth" 
+                                            value={`₹${totalWealth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                            subtext={`Total Return: +${totalReturnPercent.toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`}
+                                            icon="fa-piggy-bank"
+                                            glowClass="glow-pink"
+                                        />
+                                        <MetricCard 
+                                            title="CAGR (Annualized)" 
+                                            value={`${cagr.toFixed(2)}%`}
+                                            subtext={`Held for ${holdingYears.toFixed(1)} years`}
+                                            icon="fa-arrow-up-right-dots"
+                                            glowClass="glow-purple"
+                                        />
+                                    </div>
+
+                                    {/* Timeline and History Panel */}
+                                    <div className="glass-panel timeline-panel">
+                                        <div className="timeline-header">
+                                            <div>
+                                                <h2><i className="fa-solid fa-timeline header-icon"></i> Wealth & Actions Timeline</h2>
+                                                <p className="subtitle">Chronological ledger of structural holdings and payouts</p>
+                                            </div>
+                                            <div className="timeline-tabs">
+                                                <button className={`tab-btn ${filterType === 'ALL' ? 'active' : ''}`} onClick={() => setFilterType('ALL')}>All Events</button>
+                                                <button className={`tab-btn ${filterType === 'SPLIT' ? 'active' : ''}`} onClick={() => setFilterType('SPLIT')}>Splits</button>
+                                                <button className={`tab-btn ${filterType === 'BONUS' ? 'active' : ''}`} onClick={() => setFilterType('BONUS')}>Bonuses</button>
+                                                <button className={`tab-btn ${filterType === 'DIVIDEND' ? 'active' : ''}`} onClick={() => setFilterType('DIVIDEND')}>Dividends</button>
+                                            </div>
+                                        </div>
+
+                                        <div className="timeline-flow">
+                                            {filteredTimeline.length === 0 ? (
+                                                <div className="no-events">
+                                                    <i className="fa-regular fa-folder-open"></i>
+                                                    <p>No corporate action events matching the selected filter.</p>
+                                                </div>
+                                            ) : (
+                                                filteredTimeline.map((event, idx) => (
+                                                    <TimelineItem key={idx} event={event} index={idx} />
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

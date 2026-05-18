@@ -1,0 +1,68 @@
+# ==============================================================================
+# PASSIVE WEALTH RECONSTRUCTION ENGINE - DOCKER COMPOSE CONFIGURATION
+# ==============================================================================
+#
+# Usage:
+#   1. Copy '.env.example' to '.env' and fill in your custom credentials.
+#   2. Run 'docker-compose up -d' to start all services in the background.
+#   3. Run 'docker-compose down' to stop the containers (retains volume data).
+#
+# Note on local-only setups:
+#   If Docker is not installed on your host, you can run PostgreSQL 18 and Redis
+#   directly on your local environment utilizing port 5432 and 6379 respectively.
+#
+
+version: '3.8'
+
+services:
+  # --- PostgreSQL Database Service ---
+  db:
+    image: postgres:15-alpine
+    container_name: pwre-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      # Sourced from your local '.env' file, falling back to safe defaults if undefined
+      POSTGRES_USER: ${POSTGRES_USER:-pwre_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pwre_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-pwre_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - pwre-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pwre_user} -d ${POSTGRES_DB:-pwre_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Redis Cache & Celery Broker Service ---
+  redis:
+    image: redis:7.2-alpine
+    container_name: pwre-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - pwre-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# --- Persistent Named Volumes ---
+volumes:
+  postgres_data:
+    name: pwre_postgres_data
+  redis_data:
+    name: pwre_redis_data
+
+# --- Shared Network Configuration ---
+networks:
+  pwre-network:
+    name: pwre_shared_network
+    driver: bridge
