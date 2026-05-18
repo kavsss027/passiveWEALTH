@@ -104,3 +104,8 @@ poetry.lock
 .coverage
 htmlcov/
 .pytest_cache/
+
+# ───────────────────────────────
+# PROJECT DOCUMENTS (PRIVATE)
+# ───────────────────────────────
+docs
