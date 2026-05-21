@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import List, Dict, Any
 from datetime import date
 from decimal import Decimal
@@ -10,6 +11,96 @@ from app.core.constants import ActionType, ConfidenceLevel
 from app.core.exceptions import NormalizationError
 
 logger = logging.getLogger(__name__)
+
+def parse_nse_purpose(purpose_str: str) -> tuple[str, Decimal, Decimal]:
+    if not purpose_str or not purpose_str.strip():
+        return "OTHER", Decimal("1"), Decimal("1")
+        
+    p_upper = purpose_str.upper()
+    
+    # Skip clear non-actions
+    if any(x in p_upper for x in ["ANNUAL GENERAL MEETING", "AGM", "BOOK CLOSURE", "EXTRAORDINARY GENERAL MEETING", "EGM", "INTEREST PAYMENT"]):
+        if not any(x in p_upper for x in ["DIVIDEND", "BONUS", "SPLIT"]):
+            return "OTHER", Decimal("1"), Decimal("1")
+    
+    # 1. Dividend
+    if any(x in p_upper for x in ["DIVIDEND", "INTERIM", "FINAL", "SPECIAL DIV"]):
+        # Try to find all rupee amounts
+        matches = re.findall(r"(?:RS|RE|RUPEES)[\s\.]*([\d\.]+)", p_upper)
+        if matches:
+            try:
+                total = sum(Decimal(x) for x in matches)
+                return "DIVIDEND", total, Decimal("1")
+            except Exception:
+                pass
+        
+        # Fallback to any standalone decimals
+        matches = re.findall(r"\b(\d+\.\d+|\d+)\b", p_upper)
+        if matches:
+            try:
+                vals = []
+                for x in matches:
+                    val = Decimal(x)
+                    if val < 500: # unlikely to have > 500 Rs dividend
+                        vals.append(val)
+                if vals:
+                    return "DIVIDEND", sum(vals), Decimal("1")
+            except Exception:
+                pass
+                
+        return "DIVIDEND", Decimal("0"), Decimal("1")
+        
+    # 2. Bonus
+    if "BONUS" in p_upper:
+        # Look for ratio X:Y
+        match = re.search(r"(\d+)\s*:\s*(\d+)", p_upper)
+        if match:
+            return "BONUS", Decimal(match.group(1)), Decimal(match.group(2))
+        match = re.search(r"(\d+)\s*TO\s*(\d+)", p_upper)
+        if match:
+            return "BONUS", Decimal(match.group(1)), Decimal(match.group(2))
+        return "BONUS", Decimal("1"), Decimal("1")
+        
+    # 3. Split
+    if any(x in p_upper for x in ["SPLIT", "SUB-DIVISION", "SUB DIVISION", "SUB_DIVISION"]):
+        match = re.search(r"FROM\s*RS\s*(\d+)\s*TO\s*RS\s*(\d+)", p_upper)
+        if match:
+            old = Decimal(match.group(1))
+            new = Decimal(match.group(2))
+            if new > 0:
+                return "SPLIT", old / new, Decimal("1")
+        match = re.search(r"RS\s*(\d+)/?-\s*TO\s*RS\s*(\d+)/?-", p_upper)
+        if match:
+            old = Decimal(match.group(1))
+            new = Decimal(match.group(2))
+            if new > 0:
+                return "SPLIT", old / new, Decimal("1")
+        # Try custom match pattern
+        match = re.search(r"FROM\s*RS\.?\s*(\d+).*?TO\s*RS\.?\s*(\d+)", p_upper)
+        if match:
+            old = Decimal(match.group(1))
+            new = Decimal(match.group(2))
+            if new > 0:
+                return "SPLIT", old / new, Decimal("1")
+                
+        # Secondary parsing path if regex didn't match directly but we have FROM/TO and RS
+        if re.search(r"FROM\s*RS\.?\s*", p_upper) and re.search(r"TO\s*RS\.?\s*", p_upper):
+            nums = re.findall(r'[\d.]+', purpose_str)
+            if len(nums) >= 2:
+                try:
+                    old = Decimal(nums[0])
+                    new = Decimal(nums[1])
+                    if new > 0:
+                        return "SPLIT", old / new, Decimal("1")
+                except Exception:
+                    pass
+                    
+        match = re.search(r"(\d+)\s*:\s*(\d+)", p_upper)
+        if match:
+            return "SPLIT", Decimal(match.group(1)), Decimal(match.group(2))
+        return "SPLIT", Decimal("2"), Decimal("1")
+        
+    return "OTHER", Decimal("1"), Decimal("1")
 
 def resolve_confidence_and_ratio(nse_action: RawCorporateAction, yahoo_action: RawCorporateAction) -> tuple[Decimal, Decimal, str]:
     """

@@ -13,7 +13,7 @@ from app.database.models.corporate_actions import CorporateAction
 from app.pipeline.ingestion.nse import fetch_nse_corporate_actions
 from app.pipeline.ingestion.yahoo_finance import fetch_yahoo_finance_data, get_historical_close_price
 
-from app.pipeline.normalization.action_normalizer import normalize_corporate_actions
+from app.pipeline.normalization.action_normalizer import normalize_corporate_actions, parse_nse_purpose
 from app.reconstruction.engine import ReconstructionEngine, ReconstructionResult
 from app.corporate_actions.split import StockSplitHandler
 from app.corporate_actions.bonus import BonusIssueHandler
@@ -34,75 +34,6 @@ def parse_nse_date(date_str: str) -> date:
         pass
     raise ValueError(f"Unknown date format: {date_str}")
 
-def parse_nse_purpose(purpose_str: str) -> tuple[str, Decimal, Decimal]:
-    if not purpose_str or not purpose_str.strip():
-        return "OTHER", Decimal("1"), Decimal("1")
-        
-    p_upper = purpose_str.upper()
-    
-    # Skip clear non-actions
-    if any(x in p_upper for x in ["ANNUAL GENERAL MEETING", "AGM", "BOOK CLOSURE", "EXTRAORDINARY GENERAL MEETING", "EGM", "INTEREST PAYMENT"]):
-        if not any(x in p_upper for x in ["DIVIDEND", "BONUS", "SPLIT"]):
-            return "OTHER", Decimal("1"), Decimal("1")
-    
-    # 1. Dividend
-    if any(x in p_upper for x in ["DIVIDEND", "INTERIM", "FINAL", "SPECIAL DIV"]):
-        # Try to find all rupee amounts
-        matches = re.findall(r"(?:RS|RE|RUPEES)[\s\.]*([\d\.]+)", p_upper)
-        if matches:
-            try:
-                total = sum(Decimal(x) for x in matches)
-                return "DIVIDEND", total, Decimal("1")
-            except Exception:
-                pass
-        
-        # Fallback to any standalone decimals
-        matches = re.findall(r"\b(\d+\.\d+|\d+)\b", p_upper)
-        if matches:
-            try:
-                vals = []
-                for x in matches:
-                    val = Decimal(x)
-                    if val < 500: # unlikely to have > 500 Rs dividend
-                        vals.append(val)
-                if vals:
-                    return "DIVIDEND", sum(vals), Decimal("1")
-            except Exception:
-                pass
-                
-        return "DIVIDEND", Decimal("0"), Decimal("1")
-        
-    # 2. Bonus
-    if "BONUS" in p_upper:
-        # Look for ratio X:Y
-        match = re.search(r"(\d+)\s*:\s*(\d+)", p_upper)
-        if match:
-            return "BONUS", Decimal(match.group(1)), Decimal(match.group(2))
-        match = re.search(r"(\d+)\s*TO\s*(\d+)", p_upper)
-        if match:
-            return "BONUS", Decimal(match.group(1)), Decimal(match.group(2))
-        return "BONUS", Decimal("1"), Decimal("1")
-        
-    # 3. Split
-    if any(x in p_upper for x in ["SPLIT", "SUB-DIVISION", "SUB DIVISION", "SUB_DIVISION"]):
-        match = re.search(r"FROM\s*RS\s*(\d+)\s*TO\s*RS\s*(\d+)", p_upper)
-        if match:
-            old = Decimal(match.group(1))
-            new = Decimal(match.group(2))
-            if new > 0:
-                return "SPLIT", old / new, Decimal("1")
-        match = re.search(r"RS\s*(\d+)/?-\s*TO\s*RS\s*(\d+)/?-", p_upper)
-        if match:
-            old = Decimal(match.group(1))
-            new = Decimal(match.group(2))
-            if new > 0:
-                return "SPLIT", old / new, Decimal("1")
-        match = re.search(r"(\d+)\s*:\s*(\d+)", p_upper)
-        if match:
-            return "SPLIT", Decimal(match.group(1)), Decimal(match.group(2))
-        return "SPLIT", Decimal("2"), Decimal("1")
-        
-    return "OTHER", Decimal("1"), Decimal("1")
 
 async def ensure_corporate_actions_ingested(session: AsyncSession, ticker: str, exchange: str) -> list[CorporateAction]:
     ticker = ticker.upper()
