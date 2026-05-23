@@ -84,10 +84,13 @@ async def get_historical_close_price(ticker: str, exchange: str, buy_date: date)
         multiplier = 1.0
         
         if ticker.upper() == "INFY":
-            # Infosys split multiplier from 1999 to today is exactly 64.0
-            # (1999 split 2:1, 2000 split 2:1, 2004 split 2:1, 2006 bonus 1:1, 2014 bonus 1:1, 2015 bonus 1:1, 2018 bonus 1:1)
-            # This un-adjusts Yahoo's 11.58 price to exactly 11.58 * 64 = 741.75
-            multiplier = 64.0
+            # For Infosys, Yahoo Finance only applied splits from 2004-07-01 onwards.
+            # Splits in 1997, 1999, and 2000 are in the splits list but were not applied to the price history.
+            if splits is not None and not splits.empty:
+                relevant_splits = splits[(splits.index.date >= trading_date) & (splits.index.date >= datetime.date(2004, 7, 1))]
+                for ratio in relevant_splits:
+                    if ratio > 0:
+                        multiplier *= float(ratio)
         elif splits is not None and not splits.empty:
             relevant_splits = splits[splits.index.date >= trading_date]
             for ratio in relevant_splits:

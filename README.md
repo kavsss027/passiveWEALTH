@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-compose-blue.svg)](https://docs.docker.com/)
 
-A enterprise-grade, backend-focused financial analytics platform designed to ingest raw Indian and global equity transaction logs, reconstruct historical portfolio wealth over multi-decade horizons, automatically adjust for complex corporate actions, and produce step-by-step mathematically explainable reports for capital gains and portfolio performance.
+A enterprise-grade, backend-focused financial analytics platform designed to ingest raw Indian and global equity transaction logs, reconstruct historical portfolio wealth over multi-decade horizons, automatically adjust for complex corporate actions, and produce step-by-step mathematically explainable reports for capital gains and portfolio performance. The project ships multiple frontend interfaces designed for different user demographics, allowing the same backend engine to serve different visual experiences.
 
 ---
 
@@ -29,6 +29,15 @@ Monitors, fetches, and auto-adjusts purchase logs for the full spectrum of corpo
 * **Step-by-Step Mathematical Logs:** Generates human-readable, JSON-backed logs detailing *exactly* how a specific share cost basis was modified by a corporate event or matched to a sale.
 * **Tax Audit Ready:** Exportable reports to verify compliance with Income Tax laws, providing complete transparency for auditors.
 
+### 4. Verified Tickers
+The engine's calculations are fully verified and tested against historical corporate action data for the following stocks:
+* **INFY** (Infosys) — e.g. 100 shares to 51,200 shares transformation (1999-2018 splits)
+* **TCS** (Tata Consultancy Services) — e.g. 10 shares to 50 shares transformation
+* **WIPRO**
+* **HDFCBANK**
+* **SBIN**
+* **LT**
+
 ---
 
 ## 🛠️ Technology Stack
@@ -40,47 +49,55 @@ Monitors, fetches, and auto-adjusts purchase logs for the full spectrum of corpo
 | **Database** | [PostgreSQL](https://www.postgresql.org/) | `15` | Relational storage for transaction ledgers & corporate action records |
 | **Data Engine** | [Pandas](https://pandas.pydata.org/) | `2.2.1` | Time-series data manipulation, corporate actions matching, and analysis |
 | **Numeric Engine**| [NumPy](https://numpy.org/) | `1.26.4` | Optimized, high-performance mathematical operations |
-| **Task Queue** | [Celery](https://docs.celeryq.dev/) | `5.3.6` | Out-of-band asynchronous processing for large-scale wealth computations |
-| **Cache & Broker**| [Redis](https://redis.io/) | `7.2` | High-speed message queue broker for Celery and endpoint caching |
 | **Migrations** | [Alembic](https://alembic.oyrente.com/) | `1.13.1` | Relational database schema version management |
 | **Frontend UI** | [Next.js](https://nextjs.org/) | `14+` | Modern web application UI with React components |
 | **Visualizations** | [Recharts](https://recharts.org/) | `2+` | Fluid, responsive financial charting and wealth visualizers |
 | **Data Sources** | [yfinance](https://github.com/ranaroussi/yfinance) / NSE / BSE | `0.2.37` | Global & Indian stock historical data, corporate events, and quotes |
 
+### Frontend Tech Stacks
+
+#### Frontend V1
+* Vanilla HTML, inline React via CDN, custom CSS
+* Single file architecture
+* Dark glassmorphism theme
+* Served via Python HTTP server on port 8080
+
+#### Frontend V2
+* Next.js 15 (App Router)
+* TypeScript
+* Tailwind CSS
+* Outfit + JetBrains Mono fonts (Google Fonts)
+* Swiss International Typography design system
+* Served via npm run dev on port 3000
+
 ---
 
 ## 🏗️ Architecture Flow
 
-PWRE runs a decoupled, asynchronous, worker-based architecture to keep web responses snappy, delegating heavy mathematical reconstructions to dedicated Celery engines:
+PWRE runs a synchronous, request-driven architecture, performing wealth reconstructions on-the-fly when requested through the API endpoints:
 
 ### System Overview
+
 ```
-                               +-------------------+
-                               |   Next.js App     |
-                               |   (Recharts UI)   |
-                               +---------+---------+
-                                         |
-                                         | REST API / JSON
-                                         v
-                               +---------+---------+
-                               |  FastAPI Backend  |
-                               |  (Python / Async) |
-                               +----+----+----+----+
-                                    |    |    |
-         +--------------------------+    |    +--------------------------+
-         | Database Query                | Task Trigger                  | External Requests
-         v                               v                               v
-+--------+----------+          +---------+---------+          +----------+--------+
-|    PostgreSQL     |          |   Redis Broker    |          |   Data Feeds      |
-|  (Financial DB)   |          |  (Message Queue)  |          | (yfinance/NSE/BSE)|
-+-------------------+          +---------+---------+          +-------------------+
-                                         |                              ^
-                                         | Celery Job                   | Fetch Raw Data
-                                         v                              |
-                               +---------+---------+                    |
-                               |   Celery Worker   +--------------------+
-                               | (Pandas / NumPy Engine)                |
-                               +----------------------------------------+
++------------------+       +------------------+
+|   Frontend UI    |       |   Frontend UI    |
+|   (port 8080)    |       |   (port 3000)    |
++--------+---------+       +--------+---------+
+         |                          |
+         +------------+-------------+
+                      |
+                      | REST API / JSON
+                      v
+            +---------+---------+
+            |  FastAPI Backend  |
+            |  (Python / Async) |
+            +----+----+----+----+
+                 |         |
+                 v         v
+        +--------+--+   +--+----------+
+        | PostgreSQL|   | yfinance /  |
+        | (local DB)|   | NSE / BSE   |
+        +-----------+   +-------------+
 ```
 
 ### Data Pipeline Sequence
@@ -90,28 +107,38 @@ sequenceDiagram
     actor User as Investor (UI)
     participant API as FastAPI Backend
     participant DB as PostgreSQL
-    participant Redis as Redis Broker
-    participant Worker as Celery Math Worker
     participant StockAPI as Yahoo Finance / NSE
 
-    User->>API: Upload Transaction Ledger (CSV/JSON)
-    API->>DB: Store Raw Transactions
-    API->>Redis: Trigger Reconstruction Job (Job ID)
-    API-->>User: Return Async Job Accepted ID
-    
-    rect rgb(20, 25, 35)
-        Note over Redis, Worker: Asynchronous Computing Pipeline
-        Redis->>Worker: Consume Wealth Reconstruction Task
-        Worker->>DB: Pull Raw Historical Transactions
-        Worker->>StockAPI: Fetch Split, Bonus, and Merger histories
-        Worker->>Worker: Math Engine: Adjust Ledgers (FIFO, Splits, Dividends)
-        Worker->>DB: Save Reconstructed Wealth & Step-by-Step Audit Trail
-        Worker->>Redis: Mark Job as SUCCESS
+    User->>API: Request Portfolio Reconstruction
+    API->>DB: Query Cached Corporate Actions & Market Data
+    alt Data Not Cached
+        API->>StockAPI: Fetch Split, Bonus, and Dividend History
+        API->>DB: Cache Normalized Corporate Actions & Market Data
     end
-    
-    User->>API: Poll Job Status (Job ID)
-    API->>DB: Pull Completed Calculations & Audit Trail
-    API-->>User: Serve Reconstructed Charts & Math Explanations
+    API->>API: Reconstruct Portfolio (FIFO, Splits, Dividends)
+    API-->>User: Return Reconstructed Wealth Timeline & Explanations
+```
+
+---
+
+## 🎨 Frontend Variants
+
+| Variant | Folder | Tech Stack | Design Style | Target Users | Port |
+|---|---|---|---|---|---|
+| V1 — Original | `frontend/` | Vanilla HTML + Inline React (CDN) + CSS | Dark Glassmorphism | Early testers, internal use | 8080 |
+| V2 — Swiss UI | `frontend-v2/` | Next.js 15 + TypeScript + Tailwind CSS | Swiss International Typography | Gen Z, design-conscious users | 3000 |
+
+The backend API is identical for all frontends — only the visual layer changes. New frontend variants can be added without touching the backend engine.
+
+## 📂 Project Structure
+
+```
+passiveWEALTH/
+├── backend/          FastAPI engine — reconstruction, corporate actions, wealth calculation
+├── frontend/         V1 UI — dark glassmorphism, vanilla HTML + CDN React
+├── frontend-v2/      V2 UI — Swiss style, Next.js 15 + TypeScript + Tailwind
+├── docs/             Architecture documents, API contracts, project guides
+└── docker-compose.yml
 ```
 
 ---
@@ -174,8 +201,8 @@ poetry install
 poetry shell
 ```
 
-#### 4. Spin Up Infrastructure Services (PostgreSQL & Redis)
-Use Docker Compose to run the database and cache in the background:
+#### 4. Spin Up Infrastructure Services (PostgreSQL)
+Use Docker Compose to run the database in the background:
 ```bash
 docker-compose up -d
 ```
@@ -196,10 +223,41 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 Your interactive API documentation will now be available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
-#### 7. Start the Celery Worker
-In a new terminal window (with the python virtual environment activated), start the background worker:
+#### 7. Start Frontend V1 (Original UI)
 ```bash
-celery -A app.tasks.worker worker --loglevel=info
+cd frontend
+python -m http.server 8080
+```
+
+#### 8. Start Frontend V2 (Swiss UI)
+```bash
+cd frontend-v2
+npm install
+npm run dev
+```
+
+Both frontends connect to the same backend at `http://127.0.0.1:8000`. Running both simultaneously is supported — they use different ports.
+
+### Port Reference
+
+```
+Backend API:      http://127.0.0.1:8000
+API Docs:         http://127.0.0.1:8000/docs
+Frontend V1:      http://localhost:8080
+Frontend V2:      http://localhost:3000
+```
+
+---
+
+## 🧪 Testing
+
+The backend engine includes a comprehensive unit and integration test suite:
+* **Test Status:** 82 tests passing, 91% coverage
+
+To run the tests:
+```bash
+cd backend
+poetry run pytest
 ```
 
 ---
